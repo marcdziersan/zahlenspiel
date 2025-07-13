@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>KIDSCRIPT – Zählen lernen</title>
+  <style>
+    body {
+      font-family: "Comic Sans MS", sans-serif;
+      background: #fffde7;
+      text-align: center;
+      padding: 20px;
+    }
+
+    h1 {
+      color: #ff6f00;
+    }
+
+    textarea {
+      width: 90%;
+      height: 140px;
+      font-size: 1.2em;
+      padding: 10px;
+      border: 2px solid #ffb300;
+      border-radius: 10px;
+      margin-bottom: 15px;
+    }
+
+    button {
+      padding: 10px 20px;
+      font-size: 1.2em;
+      background: #ffb300;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #f57c00;
+    }
+
+    .output {
+      margin-top: 20px;
+      padding: 15px;
+      background: #263238;
+      color: #00e676;
+      font-size: 1.4em;
+      border-radius: 10px;
+      width: 90%;
+      margin-inline: auto;
+      white-space: pre-wrap;
+    }
+
+    .emoji {
+      font-size: 4em;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🔢 Lass uns bis 5 zählen!</h1>
+
+  <textarea id="editor">
+zeige "Lass uns zählen!"
+
+zähle von 1 bis 5
+    zeige "Das ist die Zahl " + i
+    warte 1 sekunde
+ende
+
+zeige "Super gemacht!"
+  </textarea>
+
+  <br>
+  <button id="runBtn">▶️ Start</button>
+
+  <div class="output" id="output"></div>
+  <div class="emoji" id="emojiBox"></div>
+
+  <script type="module">
+    document.getElementById("runBtn").addEventListener("click", run);
+
+    // Nur Transpiler für zeige, zähle, warte
+    class KidscriptTranspiler {
+      constructor() {
+        this.js = '';
+      }
+
+      transpile(input) {
+        this.js = '';
+        const lines = input.split('\n');
+
+        for (let line of lines) {
+          line = line.trim();
+          if (!line) continue;
+
+          if (line.startsWith('zeige')) {
+            const content = line.slice(6);
+            this.js += `await sayAndShow(${content});\n`;
+          } else if (line.startsWith('zähle von')) {
+            const match = line.match(/zähle von (\d+) bis (\d+)/);
+            if (match) {
+              const [, start, end] = match;
+              this.js += `for (let i = ${start}; i <= ${end}; i++) {\n`;
+            }
+          } else if (line.startsWith('warte')) {
+            const match = line.match(/warte (\d+) sekunden?/);
+            if (match) {
+              const ms = parseInt(match[1]) * 1000;
+              this.js += `await new Promise(r => setTimeout(r, ${ms}));\n`;
+            }
+          } else if (line === 'ende') {
+            this.js += '}\n';
+          }
+        }
+
+        return this.js;
+      }
+    }
+
+    function numberToEmoji(num) {
+      const map = ['0️⃣','1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣'];
+      return num.toString().split('').map(d => map[Number(d)]).join('');
+    }
+
+    async function sayAndShow(text) {
+      const output = document.getElementById('output');
+      const emoji = document.getElementById('emojiBox');
+      output.textContent += text + '\n';
+
+      // Zahl extrahieren und Emoji anzeigen
+      const number = text.match(/\d+/);
+      emoji.textContent = number ? numberToEmoji(Number(number[0])) : '';
+
+      if ('speechSynthesis' in window) {
+        return new Promise(resolve => {
+          const utter = new SpeechSynthesisUtterance(text);
+          utter.lang = 'de-DE';
+          utter.onend = resolve;
+          utter.onerror = resolve;
+          window.speechSynthesis.speak(utter);
+        });
+      } else {
+        return Promise.resolve();
+      }
+    }
+
+    async function run() {
+      const code = document.getElementById('editor').value;
+      const transpiler = new KidscriptTranspiler();
+      const jsCode = transpiler.transpile(code);
+
+      document.getElementById('output').textContent = '';
+      document.getElementById('emojiBox').textContent = '';
+
+      try {
+        await eval(`(async () => {${jsCode}})()`);
+      } catch (e) {
+        document.getElementById('output').textContent = 'Fehler: ' + e.message;
+      }
+    }
+  </script>
+
+</body>
+</html>
