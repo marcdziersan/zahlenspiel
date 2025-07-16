@@ -79,17 +79,10 @@ zeige "Super gemacht!"
   <div class="emoji" id="emojiBox"></div>
 
   <script type="module">
-    document.getElementById("runBtn").addEventListener("click", run);
-
-    // Nur Transpiler für zeige, zähle, warte
     class KidscriptTranspiler {
-      constructor() {
-        this.js = '';
-      }
-
-      transpile(input) {
-        this.js = '';
-        const lines = input.split('\n');
+      transpile(code) {
+        const lines = code.split('\n');
+        let jsCode = '';
 
         for (let line of lines) {
           line = line.trim();
@@ -97,69 +90,109 @@ zeige "Super gemacht!"
 
           if (line.startsWith('zeige')) {
             const content = line.slice(6);
-            this.js += `await sayAndShow(${content});\n`;
+            jsCode += `await ui.sayAndShow(${content});\n`;
           } else if (line.startsWith('zähle von')) {
             const match = line.match(/zähle von (\d+) bis (\d+)/);
             if (match) {
               const [, start, end] = match;
-              this.js += `for (let i = ${start}; i <= ${end}; i++) {\n`;
+              jsCode += `for (let i = ${start}; i <= ${end}; i++) {\n`;
             }
           } else if (line.startsWith('warte')) {
             const match = line.match(/warte (\d+) sekunden?/);
             if (match) {
               const ms = parseInt(match[1]) * 1000;
-              this.js += `await new Promise(r => setTimeout(r, ${ms}));\n`;
+              jsCode += `await ui.wait(${ms});\n`;
             }
           } else if (line === 'ende') {
-            this.js += '}\n';
+            jsCode += '}\n';
           }
         }
 
-        return this.js;
+        return jsCode;
       }
     }
 
-    function numberToEmoji(num) {
-      const map = ['0️⃣','1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣'];
-      return num.toString().split('').map(d => map[Number(d)]).join('');
-    }
+    class KidscriptUI {
+      constructor(outputEl, emojiEl) {
+        this.outputEl = outputEl;
+        this.emojiEl = emojiEl;
+      }
 
-    async function sayAndShow(text) {
-      const output = document.getElementById('output');
-      const emoji = document.getElementById('emojiBox');
-      output.textContent += text + '\n';
+      clear() {
+        this.outputEl.textContent = '';
+        this.emojiEl.textContent = '';
+      }
 
-      // Zahl extrahieren und Emoji anzeigen
-      const number = text.match(/\d+/);
-      emoji.textContent = number ? numberToEmoji(Number(number[0])) : '';
+      async sayAndShow(text) {
+        this.outputEl.textContent += text + '\n';
+        const number = text.match(/\d+/);
+        this.emojiEl.textContent = number ? this.numberToEmoji(Number(number[0])) : '';
 
-      if ('speechSynthesis' in window) {
-        return new Promise(resolve => {
-          const utter = new SpeechSynthesisUtterance(text);
-          utter.lang = 'de-DE';
-          utter.onend = resolve;
-          utter.onerror = resolve;
-          window.speechSynthesis.speak(utter);
-        });
-      } else {
+        if ('speechSynthesis' in window) {
+          return new Promise(resolve => {
+            const utter = new SpeechSynthesisUtterance(text);
+            utter.lang = 'de-DE';
+            utter.onend = resolve;
+            utter.onerror = resolve;
+            window.speechSynthesis.speak(utter);
+          });
+        }
         return Promise.resolve();
       }
-    }
 
-    async function run() {
-      const code = document.getElementById('editor').value;
-      const transpiler = new KidscriptTranspiler();
-      const jsCode = transpiler.transpile(code);
+      wait(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+      }
 
-      document.getElementById('output').textContent = '';
-      document.getElementById('emojiBox').textContent = '';
+      numberToEmoji(num) {
+        const map = ['0️⃣','1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣'];
+        return num.toString().split('').map(d => map[Number(d)]).join('');
+      }
 
-      try {
-        await eval(`(async () => {${jsCode}})()`);
-      } catch (e) {
-        document.getElementById('output').textContent = 'Fehler: ' + e.message;
+      showError(message) {
+        this.outputEl.textContent = 'Fehler: ' + message;
       }
     }
+
+    class KidscriptRuntime {
+      constructor(transpiler, ui) {
+        this.transpiler = transpiler;
+        this.ui = ui;
+      }
+
+      async execute(code) {
+        const jsCode = this.transpiler.transpile(code);
+        try {
+          await eval(`(async () => {${jsCode}})()`);
+        } catch (e) {
+          this.ui.showError(e.message);
+        }
+      }
+    }
+
+    class KidscriptApp {
+      constructor() {
+        this.editor = document.getElementById('editor');
+        this.output = document.getElementById('output');
+        this.emojiBox = document.getElementById('emojiBox');
+        this.runBtn = document.getElementById('runBtn');
+
+        this.ui = new KidscriptUI(this.output, this.emojiBox);
+        this.transpiler = new KidscriptTranspiler();
+        this.runtime = new KidscriptRuntime(this.transpiler, this.ui);
+
+        this.runBtn.addEventListener('click', () => this.run());
+      }
+
+      async run() {
+        this.ui.clear();
+        const code = this.editor.value;
+        await this.runtime.execute(code);
+      }
+    }
+
+    const app = new KidscriptApp();
+    const ui = app.ui; // Zugriff für Transpiler-Code (`ui.sayAndShow`)
   </script>
 
 </body>
